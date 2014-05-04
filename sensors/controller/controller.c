@@ -24,19 +24,19 @@ int main(int argc, char** argv) {
 	static int ret;
 	DBusMessage* msg;
 	DBusMessageIter args;
-	static int32_t sigvalue;
+	static int32_t brightness;
 
 	/* Arguments definition */
 	static char* version = "controller version 0.1.00\n";
 	static char* help;
-	asprintf(&help, "controller monitors the Yoga accelerometer and light sensor and\n\
-rotates the screen and touchscreen to match and dims screen brightness to match ambient light\n\
+	asprintf(&help, "controller monitors the Yoga accelerometer and light sensor and rotates the screen and touchscreen to match and dims screen brightness to match ambient light\n\
 \n\
 Options:\n\
 	--help		Print this help message and exit\n\
 	--version		Print version information and exit\n\
 	--debug=level		Print out debugging information (0 through 4) [%d]\n\
 	--touchscreen=ts_name	TouchScreen name [%s]\n\
+|- More options to come, use config file for now\n\
 \n\
 controller responds to method calls via DBUS on interface org.pfps.controller\n\
 Supported methods are:\n\
@@ -53,14 +53,16 @@ Supported signals (from sensors only):\n\
 	int pid;
 
 	/* Load config */
-	FILE* fp_backlight_max = fopen("/sys/class/backlight/intel_backlight/max_brightness", "r");
-	if (fp_backlight_max) {
-		if (!fscanf(fp_backlight_max, "%d", &config.light_backlight_max)) {
+	if (config.light_autodetect) {
+		FILE* fp_backlight_max = fopen("/sys/class/backlight/intel_backlight/max_brightness", "r");
+		if (fp_backlight_max) {
+			if (!fscanf(fp_backlight_max, "%d", &config.light_backlight_max)) {
+				fprintf(stderr, "Error reading max brightness, using defaults...\n");
+			}
+			fclose(fp_backlight_max);
+		} else {
 			fprintf(stderr, "Error reading max brightness, using defaults...\n");
 		}
-		fclose(fp_backlight_max);
-	} else {
-		fprintf(stderr, "Error reading max brightness, using defaults...\n");
 	}
 
 	/* Parse arguments */
@@ -82,8 +84,6 @@ Supported signals (from sensors only):\n\
 		printf("%s", help);
 		return (EXIT_SUCCESS);
 	}
-
-
 
 	/* Run main */
 	// initialise the errors
@@ -108,7 +108,9 @@ Supported signals (from sensors only):\n\
 	}
 
 	// add a rule for which messages we want to see
+	// Accept signals only from sensors
 	dbus_bus_add_match(conn, "type='signal',interface='org.pfps.sensors'", &err); // see signals from the given interface
+	// Accept method calls from any source
 	dbus_bus_add_match(conn, "type='method_call'", &err);
 	dbus_connection_flush(conn);
 	if (dbus_error_is_set(&err)) {
@@ -138,8 +140,8 @@ Supported signals (from sensors only):\n\
 			} else if (DBUS_TYPE_INT32 != dbus_message_iter_get_arg_type(&args)) {
 				fprintf(stderr, "Argument is not int!\n");
 			} else {
-				dbus_message_iter_get_basic(&args, &sigvalue);
-				if (config.debug_level >= INFO) printf("Read ambient light value = %d\n", sigvalue);
+				dbus_message_iter_get_basic(&args, &brightness);
+				if (config.debug_level >= INFO) printf("Read ambient light value = %d\n", brightness);
 
 				// If automatic light controll is disabled skip to next loop
 				if (!config.light_enabled) {
@@ -148,7 +150,7 @@ Supported signals (from sensors only):\n\
 
 				// Process the ambient light
 				int backlight = limit_interval(1, config.light_backlight_max,
-						sigvalue * config.light_backlight_max / config.light_ambient_max);
+						brightness * config.light_backlight_max / config.light_ambient_max);
 				FILE* fp = fopen("/sys/class/backlight/intel_backlight/brightness", "w");
 				if (fp) {
 					if (fprintf(fp, "%d", backlight) < 0) {

@@ -38,6 +38,7 @@ extern "C" {
 		unsigned int light_backlight_max;
 		// Enable automatic light controll
 		bool light_enabled;
+		bool light_autodetect;
 
 		/* Light events */
 		char *light_onEnable, *light_onDisable;

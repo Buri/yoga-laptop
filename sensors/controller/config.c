@@ -11,7 +11,6 @@ bool loadConfig(char* file, Config* config) {
 	/* Setup variables */
 	GKeyFile* gfile = g_key_file_new();
 	GError* gerr = NULL;
-	printf("%s\n", file);
 
 	/* Run parsing */
 	if (!g_key_file_load_from_file(gfile, file, G_KEY_FILE_NONE, &gerr)) {
@@ -21,7 +20,14 @@ bool loadConfig(char* file, Config* config) {
 
 	config->debug_level = g_key_file_get_integer(gfile, "Main", "DebugLevel", &gerr);
 	if (gerr) goto conf_error;
-	printf("%d\n", config->debug_level);
+	config->light_enabled = g_key_file_get_boolean(gfile, "Brightness", "Enabled", &gerr);
+	if (gerr) goto conf_error;
+	config->light_autodetect = g_key_file_get_boolean(gfile, "Brightness", "AutoDetect", &gerr);
+	if (gerr) goto conf_error;
+	config->light_ambient_max = g_key_file_get_integer(gfile, "Brightness", "FullBrightnessAt", &gerr);
+	if (gerr) goto conf_error;
+	config->light_backlight_max = g_key_file_get_integer(gfile, "Brightness", "MaxBrightness", &gerr);
+	if (gerr) goto conf_error;
 
 	g_key_file_free(gfile);
 	return true;

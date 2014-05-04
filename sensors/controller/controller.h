@@ -35,6 +35,7 @@ extern "C" {
 		1000,
 		937,
 		true,
+		true,
 		// Light Events
 		// onEnable
 		"/usr/bin/notify-send -i /home/buri/.utils/yoga/rotateon.png \"Autorotate enabled\"",
