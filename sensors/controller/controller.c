@@ -5,17 +5,11 @@
  * Created on 3. květen 2014, 14:55
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <errno.h>
-#include <dbus/dbus.h>
-#include "../libs/math.h"
-#include "config.h"
+#include "controller.h"
 
 /* Global variables */
 Config config;
+static char* configFile = "conf/controller.conf";
 
 /*
  *
@@ -28,7 +22,35 @@ int main(int argc, char** argv) {
 	static DBusError err;
 	static DBusConnection* conn;
 	static int ret;
+	DBusMessage* msg;
+	DBusMessageIter args;
+	static int32_t sigvalue;
 
+	/* Arguments definition */
+	static char* version = "controller version 0.1.00\n";
+	static char* help;
+	asprintf(&help, "controller monitors the Yoga accelerometer and light sensor and\n\
+rotates the screen and touchscreen to match and dims screen brightness to match ambient light\n\
+\n\
+Options:\n\
+	--help		Print this help message and exit\n\
+	--version		Print version information and exit\n\
+	--debug=level		Print out debugging information (0 through 4) [%d]\n\
+	--touchscreen=ts_name	TouchScreen name [%s]\n\
+\n\
+controller responds to method calls via DBUS on interface org.pfps.controller\n\
+Supported methods are:\n\
+	AutoBrightnessDisable\n\
+	AutoBrightnessEnable\n\
+	ConfigReload\n\
+Supported signals (from sensors only):\n\
+	als <int ambient_light_value>\n\
+",
+			config.debug_level,
+			config.touch_screen_name);
+
+	/* Other variables */
+	int pid;
 
 	/* Load config */
 	FILE* fp_backlight_max = fopen("/sys/class/backlight/intel_backlight/max_brightness", "r");
@@ -40,6 +62,27 @@ int main(int argc, char** argv) {
 	} else {
 		fprintf(stderr, "Error reading max brightness, using defaults...\n");
 	}
+
+	/* Parse arguments */
+	if (!parseArguments(argv, argc, &config)) {
+		fprintf(stderr, "Invalid argument\n");
+		return -EINVAL;
+	}
+
+	if (!loadConfig(configFile, &config)) {
+		fprintf(stderr, "Invalid config file!\n");
+		return -ENOKEY;
+	}
+
+	if (config.version_flag) {
+		printf("%s", version);
+		return (EXIT_SUCCESS);
+	}
+	if (config.help_flag) {
+		printf("%s", help);
+		return (EXIT_SUCCESS);
+	}
+
 
 
 	/* Run main */
@@ -66,27 +109,22 @@ int main(int argc, char** argv) {
 
 	// add a rule for which messages we want to see
 	dbus_bus_add_match(conn, "type='signal',interface='org.pfps.sensors'", &err); // see signals from the given interface
+	dbus_bus_add_match(conn, "type='method_call'", &err);
 	dbus_connection_flush(conn);
 	if (dbus_error_is_set(&err)) {
 		fprintf(stderr, "Match Error (%s)\n", err.message);
 		exit(1);
 	}
 
-	DBusMessage* msg;
-	DBusMessageIter args;
-	static int32_t sigvalue;
 	// loop listening for signals being emmitted
 	while (true) {
 
 		// blocking read of the next available message
-		//printf("Waiting...\n");
 		dbus_connection_read_write(conn, -1);
-		//printf("Reading message\n");
 		msg = dbus_connection_pop_message(conn);
 
 		// loop again if we haven't read a message
 		if (NULL == msg) {
-			//sleep(1);
 			printf("Message: NULL\n");
 			continue;
 		}
@@ -101,7 +139,12 @@ int main(int argc, char** argv) {
 				fprintf(stderr, "Argument is not int!\n");
 			} else {
 				dbus_message_iter_get_basic(&args, &sigvalue);
-				printf("Got Signal with value %d\n", sigvalue);
+				if (config.debug_level >= INFO) printf("Read ambient light value = %d\n", sigvalue);
+
+				// If automatic light controll is disabled skip to next loop
+				if (!config.light_enabled) {
+					continue;
+				}
 
 				// Process the ambient light
 				int backlight = limit_interval(1, config.light_backlight_max,
@@ -115,12 +158,30 @@ int main(int argc, char** argv) {
 					fclose(fp);
 				}
 			}
-		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "DisableRotation")) {
+		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "AutoBrightnessDisable")) {
 			config.light_enabled = false;
-		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "EnableRotation")) {
+			if (config.debug_level >= INFO) printf("Rotation disabled\n");
+			if (0 == (pid = fork())) {
+				system(config.light_onDisable);
+			} else {
+				wait(NULL);
+			}
+		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "AutoBrightnessEnable")) {
 			config.light_enabled = true;
+			if (config.debug_level >= INFO) printf("Rotation enabled\n");
+			if (0 == (pid = fork())) {
+				system(config.light_onEnable);
+			} else {
+				wait(NULL);
+			}
+		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "ConfigReload")) {
+			if(loadConfig(configFile, &config)){
+				if (config.debug_level >= INFO) printf("Config reloaded\n");
+			}else{
+				fprintf(stderr, "Error parsing config\n");
+			}
 		} else {
-			printf("Unknown message: %s\n", dbus_message_get_interface(msg));
+			if (config.debug_level >= ERROR) printf("Unknown message: %s\n", dbus_message_get_interface(msg));
 		}
 
 		// free the message

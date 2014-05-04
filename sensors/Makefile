@@ -23,7 +23,7 @@ light: legacy/light.c
 	cc -g `pkg-config --cflags glib-2.0 dbus-1 dbus-glib-1` -Wall -Wextra -o dist/light legacy/light.c `pkg-config --libs glib-2.0 dbus-1 dbus-glib-1`
 
 controller: controller/controller.c
-	cc -g `pkg-config --cflags glib-2.0 dbus-1 dbus-glib-1` -Wall -Wextra -o dist/controller controller/controller.c `pkg-config --libs glib-2.0 dbus-1 dbus-glib-1`
+	gcc -g `pkg-config --cflags glib-2.0 dbus-1 dbus-glib-1` -Wall -Wextra -o dist/controller controller/controller.c controller/config.c `pkg-config --libs glib-2.0 dbus-1 dbus-glib-1`
 
 install:	orientation
 	@echo Making the control files writable by you and putting the command in /usr/bin

@@ -12,11 +12,21 @@
 extern "C" {
 #endif
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <glib-2.0/glib.h>
+#include <getopt.h>
+
+	typedef enum {
+		CRITICAL, ERROR, INFO, ALL
+	} DebugLevel;
+
 	/* Config structure with default values */
 	struct Config_s {
 		/* Common config */
 		// Output level
-		int debug_level;
+		DebugLevel debug_level;
 
 		/* Orientation config*/
 		char* touch_screen_name;
@@ -29,20 +39,18 @@ extern "C" {
 		// Enable automatic light controll
 		bool light_enabled;
 
+		/* Light events */
+		char *light_onEnable, *light_onDisable;
+
 		// Enable rotation of screen
-	} Config_default = {
-		0,
-		// Orientation
-		"ELAN Touchscreen",
 
-		// Light
-		1000,
-		937,
-		true
+		/* Others */
+		int help_flag, version_flag;
 	};
-
 	typedef struct Config_s Config;
 
+	bool loadConfig(char* file, Config* config);
+	bool parseArguments(char** argv, int argc, Config* config);
 #ifdef	__cplusplus
 }
 #endif
