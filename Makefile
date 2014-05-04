@@ -14,7 +14,7 @@ driver:
 sensors:
 	cd sensors && $(MAKE) all
 sensors-drivers:
-	cd sensors/drivers && $(MAKE) default
+	cd drivers && $(MAKE) default
 all:
 	$(MAKE) sensors sensors-drivers
 

@@ -108,14 +108,15 @@ int process_scan(SensorData data, Device_info info, Config config) {
 
 	for (i = 0; i < data.read_size / data.scan_size; i++) {
 		process_scan_3(data.data + data.scan_size*i, info.channels, info.channels_count,
-				"in_accel_x", &accel_x, &present_x,
-				"in_accel_y", &accel_y, &present_y,
-				"in_accel_z", &accel_z, &present_z);
+				"in_magn_x", &accel_x, &present_x,
+				"in_magn_y", &accel_y, &present_y,
+				"in_magn_z", &accel_z, &present_z);
 		/* Determine orientation */
 		int accel_x_abs = abs(accel_x);
 		int accel_y_abs = abs(accel_y);
 		int accel_z_abs = abs(accel_z);
-		printf("%u > %u && %u > %u\n", accel_z_abs, 4*accel_x_abs, accel_z_abs, 4*accel_y_abs);
+		printf("%d, %d, %d: %f\n",accel_x, accel_y, accel_z, (double)accel_y_abs/(double)accel_z_abs);
+		/*printf("%u > %u && %u > %u\n", accel_z_abs, 4*accel_x_abs, accel_z_abs, 4*accel_y_abs);
 		if (accel_z_abs > 4 * accel_x_abs && accel_z_abs > 4 * accel_y_abs) {
 			printf("set FLAT\n");
 			orientation = FLAT;
@@ -127,7 +128,7 @@ int process_scan(SensorData data, Device_info info, Config config) {
 			printf("set LEFT/RIGHT\n");
 		}
 		if (config.debug_level > 1) printf("Orientation %d, x:%5d, y:%5d, z:%5d\n",
-				orientation, accel_x, accel_y, accel_z);
+				orientation, accel_x, accel_y, accel_z);*/
 	}
 	return orientation;
 }
@@ -242,11 +243,11 @@ void sigusr_callback_handler(int signum) {
 int main(int argc, char **argv) {
 	/* Configuration variables */
 	Config config = Config_default;
-	char *trigger_name = NULL, *device_name = "accel_3d";
+	char *trigger_name = NULL;
 
 
 	// Update default settings
-	config.device_name = "accel_3d";
+	config.device_name = "magn_3d";
 	touchScreenName = config.or_touchScreenName;
 	debug_level = config.debug_level;
 
@@ -338,9 +339,9 @@ Use via something like\n\
 	signal(SIGUSR1, sigusr_callback_handler);
 
 	/* Find the device requested */
-	info.device_id = find_type_by_name(device_name, "iio:device");
+	info.device_id = find_type_by_name(config.device_name, "iio:device");
 	if (info.device_id < 0) {
-		printf("Failed to find the %s sensor\n", device_name);
+		printf("Failed to find the %s sensor\n", config.device_name);
 		ret = -ENODEV;
 		goto error_ret;
 	}

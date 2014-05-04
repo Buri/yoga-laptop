@@ -37,7 +37,7 @@ extern "C" {
 #include "sensors.h"
 #include "config.h"
 #include "device_info.h"
-
+#include "math.h"
 
 #ifdef	__cplusplus
 }

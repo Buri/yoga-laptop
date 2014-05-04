@@ -2,7 +2,7 @@
  * File:   config.h
  * Author: buri
  *
- * Created on 2. květen 2014, 12:59
+ * Created on 4. květen 2014, 9:09
  */
 
 #ifndef CONFIG_H
@@ -12,47 +12,36 @@
 extern "C" {
 #endif
 
-#define DEBUG_ALL 4
-#define DEBUG_TRACE 3
-#define DEBUG_INFO 2
-#define DEBUG_ERROR 1
-#define DEBUG_CRITICAL 0
-
+	/* Config structure with default values */
 	struct Config_s {
 		/* Common config */
 		// Output level
 		int debug_level;
-		// Time to waite between polls
-		unsigned int poll_timeout;
-		// Times to run the script
-		int iterations;
-		// Device name
-		char* device_name;
 
 		/* Orientation config*/
-		char *or_touchScreenName;
+		char* touch_screen_name;
 
 		/* Light config */
 		// Top value used for scaling
 		unsigned int light_ambient_max;
 		// Max backlight value
 		unsigned int light_backlight_max;
-	} Config_default = {
-		DEBUG_ERROR,
-		1000000,	// 1 second
-		-1,			// infinite iterations
-		"",
+		// Enable automatic light controll
+		bool light_enabled;
 
+		// Enable rotation of screen
+	} Config_default = {
+		0,
 		// Orientation
 		"ELAN Touchscreen",
 
 		// Light
-		1400,
-		937
+		1000,
+		937,
+		true
 	};
 
 	typedef struct Config_s Config;
-
 
 #ifdef	__cplusplus
 }

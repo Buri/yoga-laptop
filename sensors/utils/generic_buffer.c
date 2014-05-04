@@ -34,57 +34,10 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <syslog.h> /*pfps*/
-#include "iio_utils.h"
+#include "../libs/iio_utils.h"
+#include "../libs/sensors.h"
+#include "../libs/print_utils.h"
 
-/**
- * size_from_channelarray() - calculate the storage size of a scan
- * @channels:           the channel info array
- * @num_channels:       number of channels
- *
- * Has the side effect of filling the channels[i].location values used
- * in processing the buffer output.
- **/
-int size_from_channelarray(struct iio_channel_info *channels, int num_channels)
-{
-        int bytes = 0;
-        int i = 0;
-        while (i < num_channels) {
-                if (bytes % channels[i].bytes == 0)
-                        channels[i].location = bytes;
-                else
-                        channels[i].location = bytes - bytes%channels[i].bytes
-                                + channels[i].bytes;
-                bytes = channels[i].location + channels[i].bytes;
-                i++;
-        }
-        return bytes;
-}
-
-void print2byte(int input, struct iio_channel_info *info)
-{
-        /* First swap if incorrect endian */
-        if (info->be)
-                input = be16toh((uint16_t)input);
-        else
-                input = le16toh((uint16_t)input);
-
-        /*
-         * Shift before conversion to avoid sign extension
-         * of left aligned data
-         */
-        input = input >> info->shift;
-        if (info->is_signed) {
-                int16_t val = input;
-                val &= (1 << info->bits_used) - 1;
-                val = (int16_t)(val << (16 - info->bits_used)) >>
-                        (16 - info->bits_used);
-                printf("SCALED %05f ", ((float)val + info->offset)*info->scale);
-        } else {
-                uint16_t val = input;
-                val &= (1 << info->bits_used) - 1;
-                printf("SCALED %05f ", ((float)val + info->offset)*info->scale);
-        }
-}
 /**
  * process_scan() - print out the values in SI units
  * @data:               pointer to the start of the scan
@@ -124,7 +77,7 @@ void process_scan(char *data,
 			  /*pfps printf("MASK %d %8x  ",channels[k].bits_used,val); */
 			  val = (int32_t)(val << (32 - channels[k].bits_used)) >> (32 - channels[k].bits_used);
 			  /*pfps printf("FIX %x\n",val); */
-			  printf("%s %4d %6.1f  ", channels[k].name, 
+			  printf("%s %4d %6.1f  ", channels[k].name,
 				 val, ((float)val + channels[k].offset)* channels[k].scale);
 			}
                         break;
@@ -152,64 +105,6 @@ void process_scan(char *data,
 	}
         printf("\n");
 }
-
-/**
- * enable_sensors: enable all the sensors in a device
- * @device_dir: the IIO device directory in sysfs
- * @
- **/
-static int enable_sensors(const char *device_dir)
-{
-	DIR *dp;
-	FILE *sysfsfp;
-	int i;
-	int ret;
-	const struct dirent *ent;
-	char *scan_el_dir;
-	char *filename;
-
-	ret = asprintf(&scan_el_dir, FORMAT_SCAN_ELEMENTS_DIR, device_dir);
-	if (ret < 0) {
-		ret = -ENOMEM;
-		goto error_ret;
-	}
-	dp = opendir(scan_el_dir);
-	if (dp == NULL) {
-		ret = -errno;
-		goto error_free_name;
-	}
-	while (ent = readdir(dp), ent != NULL) {
-		if (strcmp(ent->d_name + strlen(ent->d_name) - strlen("_en"),
-			   "_en") == 0) {
-			ret = asprintf(&filename,
-				       "%s/%s", scan_el_dir, ent->d_name);
-			if (ret < 0) {
-				ret = -ENOMEM;
-				goto error_close_dir;
-			}
-			sysfsfp = fopen(filename, "r");
-			if (sysfsfp == NULL) {
-				ret = -errno;
-				free(filename);
-				goto error_close_dir;
-			}
-			fscanf(sysfsfp, "%d", &ret);
-			fclose(sysfsfp);
-			if ( !ret )
-			  write_sysfs_int(ent->d_name,scan_el_dir,1);
-			free(filename);
-		}
-	}
-	return 0;
-error_close_dir:
-	closedir(dp);
-error_free_name:
-	free(scan_el_dir);
-error_ret:
-	return ret;
-}
-
-
 
 int main(int argc, char **argv)
 {
@@ -274,7 +169,7 @@ int main(int argc, char **argv)
         printf("iio device number being used is %d\n", dev_num);
 
         asprintf(&dev_dir_name, "%siio:device%d", iio_dir, dev_num);
-	
+
 	/* enable the sensors in the device */
 	enable_sensors(dev_dir_name);
 

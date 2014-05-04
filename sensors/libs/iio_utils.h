@@ -25,6 +25,7 @@
 #define FORMAT_SCAN_ELEMENTS_DIR "%s/scan_elements"
 #define FORMAT_TYPE_FILE "%s_type"
 
+int size_from_channelarray(struct iio_channel_info *channels, int num_channels);
 const char *iio_dir = "/sys/bus/iio/devices/";
 const char *iio_debugfs_dir = "/sys/kernel/debug/iio/";
 
@@ -672,7 +673,7 @@ int prepare_output(Device_info* info, char * dev_dir_name, char * trigger_name,
 	ret = write_sysfs_string_and_verify("trigger/current_trigger",
 			dev_dir_name, trigger_name);
 	if (ret < 0) {
-		printf("Failed to write current_trigger file %s\n", strerror(-ret));
+		fprintf(stderr, "Failed to write current_trigger file %s\n", strerror(-ret));
 		goto error_ret;
 	}
 
@@ -682,10 +683,10 @@ int prepare_output(Device_info* info, char * dev_dir_name, char * trigger_name,
 	/* Enable the buffer */
 	ret = write_sysfs_int_and_verify("buffer/enable", dev_dir_name, 1);
 	if (ret < 0) {
-		printf("Unable to enable the buffer %d\n", ret);
+		fprintf(stderr, "Unable to enable the buffer %d\n", ret);
 		goto error_ret;
 	}
-	data.scan_size = size_from_channelarray(channels, num_channels);
+	data.scan_size = (int)size_from_channelarray(channels, num_channels);
 	data.data = malloc(data.scan_size * buf_len);
 	if (!data.data) {
 		ret = -ENOMEM;
@@ -707,9 +708,9 @@ int prepare_output(Device_info* info, char * dev_dir_name, char * trigger_name,
 
 	/* Actually read the data */
 	struct pollfd pfd = {.fd = fp, .events = POLLIN,};
-	if (config.debug_level > 3) printf("Polling the data\n");
+	if (config.debug_level > DEBUG_INFO) printf("Polling the data\n");
 	poll(&pfd, 1, -1);
-	if (config.debug_level > 3) printf("Reading the data\n");
+	if (config.debug_level > DEBUG_INFO) printf("Reading the data\n");
 	data.read_size = read(fp, data.data, buf_len * data.scan_size);
 	if (config.debug_level > 3) printf("Read the data\n");
 	if (data.read_size == -EAGAIN) {

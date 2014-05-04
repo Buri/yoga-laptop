@@ -10,3 +10,5 @@ sensors/light
 sensors/orientation
 sensors/hinge
 sensors/generic_buffer
+sensors/dist/*
+!sensors/controller/*

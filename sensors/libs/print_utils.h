@@ -38,15 +38,6 @@ void print2byte(int input, struct iio_channel_info *info) {
 	}
 }
 
-/**
- *
- */
-int limit_interval(int min, int max, int nmr) {
-	if (nmr < min) return min;
-	if (nmr > max) return max;
-	return nmr;
-}
-
 void print_bytes(int length, char* data) {
 	int i;
 	for (i = 0; i < length; i++) {

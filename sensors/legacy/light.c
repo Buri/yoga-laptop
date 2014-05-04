@@ -26,9 +26,19 @@
 
 #define _GNU_SOURCE
 
-#include "libs/common.h"
-#include "libs/config.h"
-#include "libs/device_info.h"
+#include "../libs/common.h"
+#include "../libs/config.h"
+#include "../libs/device_info.h"
+#include <stdbool.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <dbus-1.0/dbus/dbus.h>
+
+static char *dev_dir_name;
+DBusError derr;
+DBusConnection* dconn;
+dbus_uint32_t serial = 0; // unique number to associate replies with requests
 
 /**
  * process_scan() - print out the values in SI units
@@ -40,7 +50,7 @@
  **/
 int process_scan(SensorData data, Device_info info, Config config) {
 	if (info.channels_count != 1 || info.channels[0].bytes != 4) {
-		return;
+		return -1;
 	}
 	struct iio_channel_info channel = info.channels[0];
 	if (channel.is_signed) {
@@ -48,21 +58,54 @@ int process_scan(SensorData data, Device_info info, Config config) {
 		val = val >> channel.shift;
 		if (channel.bits_used < 32) val &= ((uint32_t) 1 << channel.bits_used) - 1;
 		val = (int32_t) (val << (32 - channel.bits_used)) >> (32 - channel.bits_used);
-		int backlight = limit_interval(1, config.light_backlight_max, val * config.light_backlight_max / config.light_ambient_max);
-		printf("Current backlight level: %d\n", backlight);
-		FILE* fp = fopen("/sys/class/backlight/intel_backlight/brightness", "w");
+		if (config.debug_level > 2) printf("Current ambient light: %d\n", val);
+
+		/* Send signal to DBUS */
+		DBusMessage* msg;
+		DBusMessageIter args;
+
+		// create a signal and check for errors
+		msg = dbus_message_new_signal("/org/pfps/sensors", // object name of the signal
+				"org.pfps.sensors", // interface name of the signal
+				"als"); // name of the signal
+		if (NULL == msg) {
+			fprintf(stderr, "Message Null\n");
+			exit(1);
+		}
+
+
+		// append arguments onto signal
+		dbus_message_iter_init_append(msg, &args);
+		if (!dbus_message_iter_append_basic(&args, DBUS_TYPE_INT32, &val)) {
+			fprintf(stderr, "Out Of Memory!\n");
+			exit(1);
+		}
+		// create a signal and check for errors
+
+
+		// send the message and flush the connection
+		if (!dbus_connection_send(dconn, msg, &serial)) {
+			fprintf(stderr, "Out Of Memory!\n");
+			exit(1);
+		}
+		dbus_connection_flush(dconn);
+
+		// free the message
+		//dbus_message_unref(msg);
+
+		printf("Message sent\n");
+
+		/*FILE* fp = fopen("/sys/class/backlight/intel_backlight/brightness", "w");
 		if (fp) {
-			if(fprintf(fp, "%d", backlight) < 0) {
+			if (fprintf(fp, "%d", backlight) < 0) {
 				fprintf(stderr, "Failed to change brightness\n");
 				exit(EPERM);
 			}
 			fclose(fp);
-		}
+		}*/
 	}
 	return 0;
 }
-
-static char *dev_dir_name;
 
 void sigint_callback_handler(int signum) {
 	if (dev_dir_name) {
@@ -76,7 +119,7 @@ void sigint_callback_handler(int signum) {
 
 int main(int argc, char **argv) {
 	/* Configuration variables */
-	char *trigger_name = NULL, *config_file = "conf/light.ini";
+	char *trigger_name = NULL;
 	Config config = Config_default;
 	static int version_flag = 0, help_flag = 0;
 
@@ -113,7 +156,7 @@ Options:\n\
 	Device_info info;
 
 	/* Other variables */
-	int ret, c, i;
+	int ret = 0, c, i;
 	char * dummy;
 
 	static struct option long_options[] = {
@@ -177,7 +220,7 @@ Options:\n\
 		ret = -ENODEV;
 		goto error_ret;
 	}
-	if (config.debug_level > DEBUG_ALL) printf("iio device number being used is %d\n", info.device_id);
+	if (config.debug_level > DEBUG_INFO) printf("iio device number being used is %d\n", info.device_id);
 
 	/* enable the sensors in the device */
 	asprintf(&dev_dir_name, "%siio:device%d", iio_dir, info.device_id);
@@ -204,7 +247,7 @@ Options:\n\
 		ret = -ENODEV;
 		goto error_free_triggername;
 	}
-	if (config.debug_level > DEBUG_ALL) printf("iio trigger number being used is %d\n", ret);
+	if (config.debug_level > DEBUG_INFO) printf("iio trigger number being used is %d\n", ret);
 
 	/* Parse the files in scan_elements to identify what channels are present */
 	ret = build_channel_array(dev_dir_name, &(info.channels), &(info.channels_count));
@@ -214,16 +257,43 @@ Options:\n\
 		goto error_free_triggername;
 	}
 
+	/* Devices ready, connect to DBUS */
+	// initialise the errors
+	dbus_error_init(&derr);
+	// connect to the bus
+	dconn = dbus_bus_get(DBUS_BUS_SYSTEM, &derr);
+	if (dbus_error_is_set(&derr)) {
+		fprintf(stderr, "Cannot connect to dbus (%s)\n", derr.message);
+		dbus_error_free(&derr);
+		ret = -ECONNREFUSED;
+		goto error_free_triggername;
+	}
+	if (NULL == dconn) {
+		ret = -ECONNREFUSED;
+		goto error_free_triggername;
+	}
+	// request a name on the bus
+	ret = dbus_bus_request_name(dconn, "org.pfps.sensors", DBUS_NAME_FLAG_REPLACE_EXISTING, &derr);
+	if (dbus_error_is_set(&derr)) {
+		fprintf(stderr, "DBUS name rejected (%s)\n", derr.message);
+		dbus_error_free(&derr);
+	}
+	if (DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER != ret) {
+		goto error_free_triggername;
+	}
+
 	for (i = 0; i != config.iterations; i++) {
 		prepare_output(&info, dev_dir_name, trigger_name, &process_scan, config);
 		usleep(config.poll_timeout);
 	}
 
+	// Free dbus connection
+	dbus_connection_close(dconn);
+
 	return EXIT_SUCCESS;
 
 error_free_triggername:
 	free(trigger_name);
-error_free_dev_dir_name:
 	free(dev_dir_name);
 error_ret:
 	return ret;
