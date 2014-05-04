@@ -12,3 +12,4 @@ sensors/hinge
 sensors/generic_buffer
 sensors/dist/*
 !sensors/controller/*
+!sensors/dist
