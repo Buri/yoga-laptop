@@ -42,9 +42,14 @@ extern "C" {
 		// onDisable
 		"/usr/bin/notify-send -i /home/buri/.utils/yoga/rotateoff.png \"Autorotate disabled\"",
 
+		//Rotation enabled
+		true,
+
 		// Flags
 		0, 0
 	};
+
+	void toggleLight(Config*, bool);
 
 #ifdef	__cplusplus
 }

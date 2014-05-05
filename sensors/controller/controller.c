@@ -24,7 +24,6 @@ int main(int argc, char** argv) {
 	static int ret;
 	DBusMessage* msg;
 	DBusMessageIter args;
-	static int32_t brightness;
 
 	/* Arguments definition */
 	static char* version = "controller version 0.1.00\n";
@@ -48,6 +47,10 @@ Supported signals (from sensors only):\n\
 ",
 			config.debug_level,
 			config.touch_screen_name);
+
+	/* Sensor values */
+	static int32_t brightness, accel_x, accel_y, accel_z,
+	accel_x_abs, accel_y_abs, accel_z_abs;
 
 	/* Other variables */
 	int pid;
@@ -160,22 +163,38 @@ Supported signals (from sensors only):\n\
 					fclose(fp);
 				}
 			}
+		} else if (dbus_message_is_signal(msg, "org.pfps.sensors", "accel_3d")) {
+			// read the parameters
+			if (!dbus_message_iter_init(msg, &args)) {
+				fprintf(stderr, "Message has no arguments!\n");
+			} else {
+				if (DBUS_TYPE_INT32 == dbus_message_iter_get_arg_type(&args)) {
+					dbus_message_iter_get_basic(&args, &accel_x);
+					accel_x_abs = abs(accel_x);
+				}
+				if (DBUS_TYPE_INT32 == dbus_message_iter_get_arg_type(&args)) {
+					dbus_message_iter_get_basic(&args, &accel_y);
+					accel_y_abs = abs(accel_y);
+				}
+				if (DBUS_TYPE_INT32 == dbus_message_iter_get_arg_type(&args)) {
+					dbus_message_iter_get_basic(&args, &accel_z);
+					accel_z_abs = abs(accel_z);
+				}
+				if (config.debug_level >= INFO) printf("Read acclereration = (%d, %d, %d)\n", accel_x, accel_y, accel_z);
+
+				// If automatic light controll is disabled skip to next loop
+				if (!config.rotation_enabled) {
+					continue;
+				}
+
+				// Process rotation information
+			}
+		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "AutoBrightnessToggle")) {
+			toggleLight(&config, !config.light_enabled);
 		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "AutoBrightnessDisable")) {
-			config.light_enabled = false;
-			if (config.debug_level >= INFO) printf("Rotation disabled\n");
-			if (0 == (pid = fork())) {
-				system(config.light_onDisable);
-			} else {
-				wait(NULL);
-			}
+			toggleLight(&config, false);
 		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "AutoBrightnessEnable")) {
-			config.light_enabled = true;
-			if (config.debug_level >= INFO) printf("Rotation enabled\n");
-			if (0 == (pid = fork())) {
-				system(config.light_onEnable);
-			} else {
-				wait(NULL);
-			}
+			toggleLight(&config, true);
 		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "ConfigReload")) {
 			if(loadConfig(configFile, &config)){
 				if (config.debug_level >= INFO) printf("Config reloaded\n");
@@ -194,3 +213,13 @@ Supported signals (from sensors only):\n\
 	return (EXIT_SUCCESS);
 }
 
+void toggleLight(Config* config, bool state) {
+		config->light_enabled = state;
+		if (config->debug_level >= INFO) printf("Rotation %sabled\n", state == true ? "en" : "dis");
+		if (0 == fork()) {
+			system(state == true ? config->light_onEnable : config->light_onDisable);
+		} else {
+			wait(NULL);
+		}
+
+}

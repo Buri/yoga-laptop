@@ -44,6 +44,7 @@ extern "C" {
 		char *light_onEnable, *light_onDisable;
 
 		// Enable rotation of screen
+		bool rotation_enabled;
 
 		/* Others */
 		int help_flag, version_flag;
