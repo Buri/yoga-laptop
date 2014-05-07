@@ -50,11 +50,14 @@ Supported signals (from sensors only):\n\
 
 	/* Sensor values */
 	static int32_t brightness, accel_x, accel_y, accel_z,
-	accel_x_abs, accel_y_abs, accel_z_abs;
+			accel_x_abs, accel_y_abs, accel_z_abs;
+
+	/* Device variables */
+	static Orientation orientation, orientation_last = Orientation_OutOfRange;
+	static State state, state_last = State_OutOfRange;
 
 	/* Other variables */
-	int pid;
-
+	
 	/* Load config */
 	if (config.light_autodetect) {
 		FILE* fp_backlight_max = fopen("/sys/class/backlight/intel_backlight/max_brightness", "r");
@@ -188,6 +191,68 @@ Supported signals (from sensors only):\n\
 				}
 
 				// Process rotation information
+				/* Determine orientation */
+				accel_x_abs = abs(accel_x);
+				accel_y_abs = abs(accel_y);
+				accel_z_abs = abs(accel_z);
+
+				if (accel_z_abs > 4 * accel_x_abs && accel_z_abs > 4 * accel_y_abs) {
+					orientation = Orientation_Normal;
+
+				} else if (3 * accel_y_abs > 2 * accel_x_abs) {
+					orientation = accel_y > 0 ? Orientation_Normal : Orientation_Inverted;
+				} else {
+					orientation = accel_x > 0 ? Orientation_Left : Orientation_Right;
+				}
+
+				if (state == state_last && orientation == orientation_last) {
+					continue;
+				}
+
+				state_last = state;
+				orientation_last = orientation;
+
+				char* param;
+				switch (state) {
+					case State_Normal:
+						param = "normal";
+						break;
+					case State_Stand:
+						param = "stand";
+						break;
+					case State_Tent:
+						param = "tent";
+						break;
+					case State_Tablet:
+						switch (orientation) {
+							case Orientation_Normal:
+								param = "tablet-normal";
+								break;
+							case Orientation_Inverted:
+								param = "tablet-inverted";
+								break;
+							case Orientation_Left:
+								param = "tablet-left";
+								break;
+							case Orientation_Right:
+								param = "tablet-right";
+								break;
+							default:
+								break;
+						}
+						break;
+					default:
+						break;
+				}
+				if (config.debug_level > 1) printf("Orientation %d, x:%5d, y:%5d, z:%5d\n",
+						orientation, accel_x, accel_y, accel_z);
+				static char* exec;
+				asprintf(&exec, "%s \"%s\" \"%s\"", exec, param, config.touch_screen_name);
+				if (fork() == 0) {
+					system(exec);
+				}else{
+					wait(NULL);
+				}
 			}
 		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "AutoBrightnessToggle")) {
 			toggleLight(&config, !config.light_enabled);
@@ -196,9 +261,9 @@ Supported signals (from sensors only):\n\
 		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "AutoBrightnessEnable")) {
 			toggleLight(&config, true);
 		} else if (dbus_message_is_method_call(msg, "org.pfps.controller", "ConfigReload")) {
-			if(loadConfig(configFile, &config)){
+			if (loadConfig(configFile, &config)) {
 				if (config.debug_level >= INFO) printf("Config reloaded\n");
-			}else{
+			} else {
 				fprintf(stderr, "Error parsing config\n");
 			}
 		} else {
@@ -214,12 +279,12 @@ Supported signals (from sensors only):\n\
 }
 
 void toggleLight(Config* config, bool state) {
-		config->light_enabled = state;
-		if (config->debug_level >= INFO) printf("Rotation %sabled\n", state == true ? "en" : "dis");
-		if (0 == fork()) {
-			system(state == true ? config->light_onEnable : config->light_onDisable);
-		} else {
-			wait(NULL);
-		}
+	config->light_enabled = state;
+	if (config->debug_level >= INFO) printf("Rotation %sabled\n", state == true ? "en" : "dis");
+	if (0 == fork()) {
+		system(state == true ? config->light_onEnable : config->light_onDisable);
+	} else {
+		wait(NULL);
+	}
 
 }

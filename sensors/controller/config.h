@@ -46,6 +46,8 @@ extern "C" {
 		// Enable rotation of screen
 		bool rotation_enabled;
 
+		char* orientation_exec;
+
 		/* Others */
 		int help_flag, version_flag;
 	};

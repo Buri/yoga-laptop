@@ -29,6 +29,9 @@ bool loadConfig(char* file, Config* config) {
 	config->light_backlight_max = g_key_file_get_integer(gfile, "Brightness", "MaxBrightness", &gerr);
 	if (gerr) goto conf_error;
 
+	config->orientation_exec = g_key_file_get_string(gfile, "Rotation", "Exec", &gerr);
+	if (gerr) goto conf_error;
+
 	g_key_file_free(gfile);
 	return true;
 

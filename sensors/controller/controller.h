@@ -45,10 +45,19 @@ extern "C" {
 		//Rotation enabled
 		true,
 
+		// Exec
+		NULL,
 		// Flags
 		0, 0
 	};
 
+	typedef enum {
+		State_Normal, State_Stand, State_Tent, State_Tablet, State_OutOfRange
+	} State;
+
+	typedef enum {
+		Orientation_Normal, Orientation_Left, Orientation_Inverted, Orientation_Right, Orientation_OutOfRange
+	} Orientation;
 	void toggleLight(Config*, bool);
 
 #ifdef	__cplusplus
